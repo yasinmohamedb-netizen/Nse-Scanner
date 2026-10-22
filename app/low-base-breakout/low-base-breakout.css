@@ -82,3 +82,12 @@
 .lbb-footer { padding:24px 0 8px; text-align:center; color:#536174; font-size:10px; }
 @media(max-width:1050px) { .lbb-settings { grid-template-columns:repeat(2,minmax(0,1fr)); } .lbb-stock-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:650px) { .lbb-shell { padding:0 9px 18px; } .lbb-data-banner { margin:0 -9px; font-size:10px; } .lbb-header,.lbb-intro { align-items:flex-start; flex-direction:column; } .lbb-nav { flex-wrap:wrap; } .lbb-intro { padding:20px 0 15px; } .lbb-settings,.lbb-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } .lbb-stock-grid { grid-template-columns:1fr; } .lbb-results-head { align-items:flex-start; flex-direction:column; } .lbb-summary strong { font-size:19px; } }
+
+
+/* Low-base results use the same real candlestick cards as the main scanner. */
+.lbb-stock-chart-card { padding:0; }
+.lbb-stock-chart-card > .stock-card-link { display:block; }
+.lbb-stock-chart-card > .stock-card-link .stock-card { border:0; border-radius:9px 9px 0 0; }
+.lbb-stock-chart-card .lbb-stats { margin:0 13px; }
+.lbb-distance-row { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:0 13px 13px; padding-top:9px; border-top:1px solid #202a36; color:#8491a2; font-size:10px; }
+.lbb-distance-row b { color:#9ce3c7; font-size:11px; }
