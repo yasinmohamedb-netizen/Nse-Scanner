@@ -122,7 +122,7 @@ export default function LowBaseBreakoutPage() {
         <div>
           <div className="lbb-eyebrow">STRATEGY SCANNER / DAILY CHARTS</div>
           <h2>Low Base Breakout</h2>
-          <p>Scan the NSE universe for stocks consolidating after a downtrend and closing above the base resistance today.</p>
+          <p>Scan for a swing low, tight inside-bar consolidation for 3–9 trading days, and a bullish daily close above base resistance.</p>
         </div>
         <button className="lbb-scan-button" onClick={scanAll} disabled={loading}>
           <RefreshCw size={16} className={loading ? "lbb-spin" : ""}/>
@@ -186,6 +186,8 @@ export default function LowBaseBreakoutPage() {
             <div className="lbb-breakout-line"><span>Today's close</span><b>₹{stock.price.toFixed(2)}</b></div>
           </div>
           <div className="lbb-stats">
+            <div><span>Pivot low</span><b>₹{(stock.pivotLow ?? stock.baseLow).toFixed(2)}</b></div>
+            <div><span>Inside bars</span><b>{stock.insideBars ?? "—"}</b></div>
             <div><span>Base length</span><b>{stock.baseDays} days</b></div>
             <div><span>Range width</span><b>{stock.baseRangePct.toFixed(2)}%</b></div>
             <div><span>Volume</span><b>{(stock.volume || 0).toLocaleString("en-IN")}</b></div>
