@@ -122,7 +122,7 @@ export default function LowBaseBreakoutPage() {
         <div>
           <div className="lbb-eyebrow">STRATEGY SCANNER / DAILY CHARTS</div>
           <h2>Low Base Breakout</h2>
-          <p>Scan for a swing low, tight inside-bar consolidation for 3–9 trading days, and a bullish daily close above base resistance.</p>
+          <p>Find a swing low, a tight 3–9 day consolidation with an inside bar, and a bullish daily close above base resistance. Base duration is detected automatically.</p>
         </div>
         <button className="lbb-scan-button" onClick={scanAll} disabled={loading}>
           <RefreshCw size={16} className={loading ? "lbb-spin" : ""}/>
@@ -132,11 +132,9 @@ export default function LowBaseBreakoutPage() {
 
       <section className="lbb-settings">
         <div className="lbb-setting">
-          <label htmlFor="lbb-days">Consolidation duration</label>
-          <select id="lbb-days" value={days} onChange={e => setDays(e.target.value)}>
-            {[3,4,5,6,7,8,9].map(n => <option value={n} key={n}>{n} trading days</option>)}
-          </select>
-          <small>Changing duration does not start a scan. Press Scan Again to apply it.</small>
+          <label>Consolidation duration</label>
+          <div className="lbb-auto-duration">Automatic · 3–9 trading days</div>
+          <small>The scanner tests each base length and selects the matching setup automatically.</small>
         </div>
         <div className="lbb-setting">
           <label htmlFor="lbb-min-price">Minimum price (₹)</label>
