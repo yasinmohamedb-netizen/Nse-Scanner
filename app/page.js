@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, RefreshCw, Search, SlidersHorizontal, Wifi, WifiOff, X } from "lucide-react";
+import Link from "next/link";
 import StockCard from "../components/StockCard";
 import { nseUniverse } from "../lib/nse-universe";
 
@@ -261,6 +262,7 @@ export default function Home() {
           <div className="brand-icon"><Activity size={20} /></div>
           <div><h1>NSE <span>Scanner</span></h1><p>Multi-chart candlestick workspace</p></div>
         </div>
+        <Link href="/low-base-breakout" style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 12px", border: "1px solid #245541", borderRadius: 8, background: "#10251f", color: "#9ce3c7", textDecoration: "none", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>Low Base Breakout ↗</Link>
         <div className="filters">
           <label>Min price (₹)<input type="number" min="0" value={minPrice} onChange={e => setMinPrice(e.target.value)} /></label>
           <label>Max price (₹)<input type="number" min="0" value={maxPrice} onChange={e => setMaxPrice(e.target.value)} /></label>
