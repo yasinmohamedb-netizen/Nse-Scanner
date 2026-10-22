@@ -8,7 +8,6 @@ import "./low-base-breakout.css";
 const CACHE_KEY = "nse-low-base-breakout-latest-v1";
 
 export default function LowBaseBreakoutPage() {
-  const [days, setDays] = useState("5");
   const [minPrice, setMinPrice] = useState("0");
   const [maxPrice, setMaxPrice] = useState("");
   const [minVolume, setMinVolume] = useState("0");
@@ -34,7 +33,6 @@ export default function LowBaseBreakoutPage() {
           setUpdatedAt(cached.updatedAt || "");
           setWarning(cached.warning || "");
           setNote(cached.note || "");
-          if (cached.days) setDays(String(cached.days));
         }
       }
     } catch (_) {
@@ -58,7 +56,7 @@ export default function LowBaseBreakoutPage() {
     let scanNote = "";
     try {
       while (true) {
-        const response = await fetch(`/api/market/low-base-breakout?offset=${offset}&limit=20&days=${days}`, { cache: "no-store" });
+        const response = await fetch(`/api/market/low-base-breakout?offset=${offset}&limit=20`, { cache: "no-store" });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || "Strategy scan failed.");
         total = payload.total || total;
@@ -79,7 +77,7 @@ export default function LowBaseBreakoutPage() {
         try {
           window.localStorage.setItem(CACHE_KEY, JSON.stringify({
             stocks: found, progress: nextProgress, errors: errorCount, updatedAt: stamp,
-            warning: sourceWarning, note: scanNote, days,
+            warning: sourceWarning, note: scanNote,
           }));
         } catch (_) {
           // Keep results in memory if local storage fills up.
@@ -99,14 +97,14 @@ export default function LowBaseBreakoutPage() {
     const volume = minVolume === "" ? 0 : Number(minVolume);
     if (min > max) return [];
     return stocks.filter(s => s.price >= min && s.price <= max && (s.volume || 0) >= volume)
-      .sort((a, b) => sort === "price-asc" ? a.price - b.price : sort === "volume-desc" ? (b.volume || 0) - (a.volume || 0) : b.breakoutPct - a.breakoutPct);
+      .sort((a, b) => sort === "price-asc" ? a.price - b.price : sort === "volume-desc" ? (b.volume || 0) - (a.volume || 0) : a.distanceToBreakoutPct - b.distanceToBreakoutPct);
   }, [stocks, minPrice, maxPrice, minVolume, sort]);
 
   const progressPct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
 
   return (
     <main className="lbb-shell">
-      <div className="lbb-data-banner"><Activity size={14} /> Daily candles from Yahoo Finance · unofficial source · close-confirmed signals only</div>
+      <div className="lbb-data-banner"><Activity size={14} /> Yahoo Finance daily candles · unofficial source · pre-breakout setups only</div>
       <header className="lbb-header">
         <div className="lbb-brand">
           <div className="lbb-brand-icon"><Activity size={21}/></div>
@@ -122,7 +120,7 @@ export default function LowBaseBreakoutPage() {
         <div>
           <div className="lbb-eyebrow">STRATEGY SCANNER / DAILY CHARTS</div>
           <h2>Low Base Breakout</h2>
-          <p>Find a swing low, a tight 3–9 day consolidation with an inside bar, and a bullish daily close above base resistance. Base duration is detected automatically.</p>
+          <p>Find stocks after a downtrend, consolidating near a swing low for 3–9 trading days. Show only setups still below resistance—not stocks that have already broken out.</p>
         </div>
         <button className="lbb-scan-button" onClick={scanAll} disabled={loading}>
           <RefreshCw size={16} className={loading ? "lbb-spin" : ""}/>
@@ -155,10 +153,10 @@ export default function LowBaseBreakoutPage() {
       {warning && <div className="lbb-warning"><WifiOff size={15}/><span>{warning}</span></div>}
 
       <section className="lbb-summary">
-        <div><span>Confirmed breakouts</span><strong>{filteredStocks.length.toLocaleString("en-IN")}</strong></div>
+        <div><span>Pre-breakout setups</span><strong>{filteredStocks.length.toLocaleString("en-IN")}</strong></div>
         <div><span>Symbols scanned</span><strong>{progress.done.toLocaleString("en-IN")}<small> / {progress.total.toLocaleString("en-IN") || "—"}</small></strong></div>
         <div><span>Failed symbols</span><strong>{errors.toLocaleString("en-IN")}</strong></div>
-        <div><span>Base duration</span><strong>{days} <small>days</small></strong></div>
+        <div><span>Base duration</span><strong>3–9 <small>auto</small></strong></div>
       </section>
 
       {progress.total > 0 && <section className="lbb-progress">
@@ -168,15 +166,15 @@ export default function LowBaseBreakoutPage() {
       </section>}
 
       <section className="lbb-results-head">
-        <div><h3>Today's confirmed breakouts</h3><p>Only completed daily closes strictly above prior base resistance qualify.</p></div>
-        <label>Sort by <select value={sort} onChange={e => setSort(e.target.value)}><option value="breakout">Breakout strength</option><option value="price-asc">Price: low to high</option><option value="volume-desc">Volume: high to low</option></select></label>
+        <div><h3>Stocks building a low base</h3><p>Prior downtrend + swing low + 3–9 day base. Current price remains below resistance.</p></div>
+        <label>Sort by <select value={sort} onChange={e => setSort(e.target.value)}><option value="breakout">Closest to breakout</option><option value="price-asc">Price: low to high</option><option value="volume-desc">Volume: high to low</option></select></label>
       </section>
 
       {filteredStocks.length ? <section className="lbb-stock-grid">
         {filteredStocks.map(stock => <article className="lbb-stock-card" key={stock.symbol}>
           <div className="lbb-stock-top">
             <div><div className="lbb-symbol">{stock.symbol}</div><div className="lbb-name">{stock.name}</div></div>
-            <div className="lbb-price"><strong>₹{stock.price.toLocaleString("en-IN", {maximumFractionDigits:2})}</strong><span>+{stock.breakoutPct.toFixed(2)}% above base</span></div>
+            <div className="lbb-price"><strong>₹{stock.price.toLocaleString("en-IN", {maximumFractionDigits:2})}</strong><span>+{stock.distanceToBreakoutPct.toFixed(2)}% to resistance</span></div>
           </div>
           <div className="lbb-mini-chart" aria-label="Illustrative candle summary">
             <div className="lbb-resistance"><span>Resistance ₹{stock.resistance.toFixed(2)}</span></div>
@@ -194,12 +192,12 @@ export default function LowBaseBreakoutPage() {
         </article>)}
       </section> : <section className="lbb-empty">
         <Search size={28}/>
-        <h3>{loading ? "Scanning the NSE universe…" : loadedCache && !stocks.length && !progress.total ? "Ready to scan" : "No confirmed breakouts match your filters"}</h3>
+        <h3>{loading ? "Scanning the NSE universe…" : loadedCache && !stocks.length && !progress.total ? "Ready to scan" : "No pre-breakout setups match your filters"}</h3>
         <p>{loading ? "Results will appear as each batch completes. Price filters apply instantly to the scanned results." : !progress.total ? "Press Scan All Stocks to check the official NSE mainboard and SME lists." : "Try a wider price range or lower the minimum volume. Filters do not trigger a new scan; press Scan Again to refresh market data."}</p>
         {!loading && !progress.total && <button className="lbb-scan-button" onClick={scanAll}><RefreshCw size={15}/> Scan All Stocks</button>}
       </section>}
 
-      <footer className="lbb-footer">Low Base Breakout · Daily close confirmation · Yahoo Finance data may be delayed, incomplete or rate-limited. Not investment advice.</footer>
+      <footer className="lbb-footer">Low Base Pre-Breakout · Daily close confirmation · Yahoo Finance data may be delayed, incomplete or rate-limited. Not investment advice.</footer>
     </main>
   );
 }
