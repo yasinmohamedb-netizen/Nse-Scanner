@@ -82,80 +82,74 @@ async function fetchDaily(symbol) {
  * 3) The base stays above the swing low, is tight, and shows inside/range-bound trade.
  * 4) Today's completed candle closes above the entire base resistance.
  */
-function evaluateBase(item, days) {
+function evaluateBase(item) {
   if (!item.history || !item.price) return null;
   const history = item.history;
-  // Need a prior downtrend, a pivot low, and the full consolidation window.
-  if (history.length < days + 18) return null;
+  if (history.length < 30) return null;
 
-  const baseStart = history.length - days;
-  const base = history.slice(baseStart);
-  const preBase = history.slice(0, baseStart);
-  if (preBase.length < 15 || base.length !== days) return null;
-
-  const resistance = Math.max(...base.map(c => c.high));
-  const baseLow = Math.min(...base.map(c => c.low));
-  const baseRangePct = baseLow > 0 ? ((resistance - baseLow) / baseLow) * 100 : Infinity;
-
-  // Search for a confirmed local pivot low 3–12 sessions before the base.
-  // Two candles on either side must have lows above the pivot; keep the pivot
-  // close enough to the base that it represents the setup's recent low.
-  let pivot = null;
-  const pivotSearchStart = Math.max(2, preBase.length - 15);
-  const pivotSearchEnd = preBase.length - 3;
-  for (let i = pivotSearchStart; i <= pivotSearchEnd; i++) {
-    const c = preBase[i];
-    const left = preBase.slice(i - 2, i);
-    const right = preBase.slice(i + 1, i + 3);
-    if (left.length !== 2 || right.length !== 2) continue;
-    const localLow = [...left, ...right].every(other => other.low > c.low);
-    if (localLow && (!pivot || c.low < pivot.low)) pivot = { ...c, index: i };
-  }
-  if (!pivot) return null;
-
-  const beforePivot = preBase.slice(Math.max(0, pivot.index - 12), pivot.index);
-  if (beforePivot.length < 6) return null;
-  // The setup should arrive at the pivot from a meaningful downswing.
-  const downtrend = beforePivot[0].close > pivot.low * 1.04;
-  if (!downtrend) return null;
-
-  // Base must hold above the low and remain compact; avoid a wide or falling base.
-  const baseHoldsLow = base.every(c => c.low >= pivot.low * 0.985);
-  const tightBase = baseRangePct <= 8;
-  const baseCloses = base.map(c => c.close);
-  const closeDriftPct = baseCloses.length > 1
-    ? ((Math.max(...baseCloses) - Math.min(...baseCloses)) / Math.min(...baseCloses)) * 100
-    : Infinity;
-  const sideways = closeDriftPct <= 7;
-
-  // Count true inside bars: current day's high/low both sit inside the previous
-  // day's range. Require at least one for a 3-day base, two for longer bases.
-  let insideBars = 0;
-  for (let i = 1; i < base.length; i++) {
-    if (base[i].high <= base[i - 1].high && base[i].low >= base[i - 1].low) insideBars++;
-  }
-  const requiredInsideBars = days <= 3 ? 1 : 2;
-  const insideTrade = insideBars >= requiredInsideBars;
-
-  // The breakout must be a bullish daily candle that closes above the base high.
   const todayCandle = item.candles?.[item.candles.length - 1];
-  const bullishBreakout = todayCandle && todayCandle.close > todayCandle.open;
-  const confirmed = item.price > resistance;
+  if (!todayCandle || todayCandle.close <= todayCandle.open) return null;
 
-  if (!downtrend || !baseHoldsLow || !tightBase || !sideways || !insideTrade || !bullishBreakout || !confirmed) return null;
+  // Search the most recent possible base first. The consolidation length is
+  // automatically detected anywhere from 3 to 9 completed sessions.
+  for (let days = 9; days >= 3; days--) {
+    if (history.length < days + 18) continue;
+    const baseStart = history.length - days;
+    const base = history.slice(baseStart);
+    const preBase = history.slice(0, baseStart);
+    if (preBase.length < 15 || base.length !== days) continue;
 
-  const { history: _history, ...publicItem } = item;
-  return {
-    ...publicItem,
-    resistance,
-    baseLow,
-    pivotLow: Number(pivot.low.toFixed(2)),
-    baseRangePct: Number(baseRangePct.toFixed(2)),
-    baseDays: days,
-    insideBars,
-    breakoutPct: Number((((item.price - resistance) / resistance) * 100).toFixed(2)),
-    signal: "Swing low + inside consolidation + bullish close above resistance",
-  };
+    const resistance = Math.max(...base.map(c => c.high));
+    const baseLow = Math.min(...base.map(c => c.low));
+    const baseRangePct = baseLow > 0 ? ((resistance - baseLow) / baseLow) * 100 : Infinity;
+    if (!(item.price > resistance) || baseRangePct > 8) continue;
+
+    // Locate a recent swing/pivot low just before the consolidation.
+    let pivot = null;
+    const pivotSearchStart = Math.max(2, preBase.length - 15);
+    const pivotSearchEnd = preBase.length - 3;
+    for (let i = pivotSearchStart; i <= pivotSearchEnd; i++) {
+      const c = preBase[i];
+      const left = preBase.slice(i - 2, i);
+      const right = preBase.slice(i + 1, i + 3);
+      if (left.length !== 2 || right.length !== 2) continue;
+      if ([...left, ...right].every(other => other.low > c.low) && (!pivot || c.low < pivot.low)) {
+        pivot = { ...c, index: i };
+      }
+    }
+    if (!pivot) continue;
+
+    const beforePivot = preBase.slice(Math.max(0, pivot.index - 12), pivot.index);
+    if (beforePivot.length < 6 || beforePivot[0].close <= pivot.low * 1.04) continue;
+
+    // Price should base above the pivot, with closes clustered in a narrow band.
+    if (!base.every(c => c.low >= pivot.low * 0.985)) continue;
+    const closes = base.map(c => c.close);
+    const closeDriftPct = ((Math.max(...closes) - Math.min(...closes)) / Math.min(...closes)) * 100;
+    if (closeDriftPct > 7) continue;
+
+    let insideBars = 0;
+    for (let i = 1; i < base.length; i++) {
+      if (base[i].high <= base[i - 1].high && base[i].low >= base[i - 1].low) insideBars++;
+    }
+    // At least one genuine inside bar confirms contraction; the full base can
+    // contain other narrow-range candles too.
+    if (insideBars < 1) continue;
+
+    const { history: _history, ...publicItem } = item;
+    return {
+      ...publicItem,
+      resistance,
+      baseLow,
+      pivotLow: Number(pivot.low.toFixed(2)),
+      baseRangePct: Number(baseRangePct.toFixed(2)),
+      baseDays: days,
+      insideBars,
+      breakoutPct: Number((((item.price - resistance) / resistance) * 100).toFixed(2)),
+      signal: "Swing low + 3–9 day tight base + bullish close above resistance",
+    };
+  }
+  return null;
 }
 
 export async function GET(request) {
@@ -163,16 +157,14 @@ export async function GET(request) {
   const offset = Math.max(0, Number.parseInt(searchParams.get("offset") || "0", 10) || 0);
   const requestedLimit = Number.parseInt(searchParams.get("limit") || "20", 10) || 20;
   const limit = Math.min(15, Math.max(1, requestedLimit));
-  const requestedDays = Number.parseInt(searchParams.get("days") || "5", 10) || 5;
-  const days = Math.min(9, Math.max(3, requestedDays));
-  const universe = await loadNseUniverse();
+    const universe = await loadNseUniverse();
   const batch = universe.stocks.slice(offset, offset + limit);
   const results = [];
   const concurrency = 3;
   for (let i = 0; i < batch.length; i += concurrency) {
     results.push(...await Promise.all(batch.slice(i, i + concurrency).map(stock => fetchDaily(stock.symbol))));
   }
-  const data = results.map(item => evaluateBase(item, days)).filter(Boolean);
+  const data = results.map(item => evaluateBase(item)).filter(Boolean);
   const errors = results.filter(item => item.error).map(({ symbol, error }) => ({ symbol, error }));
   const now = new Date();
   const marketDate = istDate(now);
@@ -183,7 +175,7 @@ export async function GET(request) {
     universeSource: universe.source, fallbackUniverse: universe.fallback, universeWarnings: universe.warnings,
     fetchedAt: now.toISOString(), marketDate, canConfirmToday,
     note: canConfirmToday
-      ? "Signals require today's completed daily candle, a recent swing low, a compact 3–9 session inside consolidation, and a bullish close above base resistance."
+      ? "Signals require today's completed daily candle, a recent swing low, a automatically detected 3–9 session inside consolidation, and a bullish close above base resistance."
       : "Daily-close signals are available after 3:35 PM India time and once Yahoo Finance publishes today's completed candle.",
     source: "Yahoo Finance unofficial daily candles",
   }, { headers: { "Cache-Control": "no-store" } });
