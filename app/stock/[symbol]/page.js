@@ -15,6 +15,16 @@ export default function StockDetail({ params }) {
   const [quote, setQuote] = useState(null);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [returnPath, setReturnPath] = useState("/");
+
+  useEffect(() => {
+    try {
+      const from = new URLSearchParams(window.location.search).get("from");
+      if (from && from.startsWith("/") && !from.startsWith("//")) setReturnPath(from);
+    } catch (_) {
+      // Keep the main scanner as the safe fallback.
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,7 +48,7 @@ export default function StockDetail({ params }) {
     <main className="detail-page">
       <div className="data-banner detail-banner"><WifiOff size={14}/> Yahoo Finance data · may be delayed or unavailable; not an official guaranteed live feed.</div>
       <header className="detail-topbar">
-        <Link href="/" className="back-link"><ArrowLeft size={16}/> Scanner</Link>
+        <Link href={returnPath} className="back-link"><ArrowLeft size={16}/> {returnPath.startsWith("/low-base-breakout") ? "Low Base Scanner" : "Scanner"}</Link>
         <div className="detail-title">
           <span className="ticker-mark large-mark">{symbol.slice(0,1)}</span>
           <div><h1>{symbol}</h1><p>NSE · {quote?.yahooSymbol || `${symbol}.NS`}</p></div>
