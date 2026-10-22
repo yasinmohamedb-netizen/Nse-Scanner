@@ -5,7 +5,7 @@ import { createChart, CandlestickSeries, HistogramSeries, ColorType, LineStyle }
 
 export default function StockChart({ stock, period = "6M", interval = "1D", height, compact = true }) {
   const hostRef = useRef(null);
-  const [candlesData, setCandlesData] = useState(stock?.candles || []);
+  const [candlesData, setCandlesData] = useState([]);
   const [chartError, setChartError] = useState("");
 
   useEffect(() => {
@@ -17,7 +17,24 @@ export default function StockChart({ stock, period = "6M", interval = "1D", heig
         const response = await fetch(`/api/market/candles?symbol=${encodeURIComponent(stock.symbol)}&range=${encodeURIComponent(period)}&interval=${encodeURIComponent(interval)}`);
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || "Could not load Yahoo Finance candles.");
-        if (!cancelled) setCandlesData(payload.candles || []);
+        if (!cancelled) {
+          const normalized = (Array.isArray(payload.candles) ? payload.candles : []).map(candle => {
+            let time = candle.time;
+            if (typeof time === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(time)) {
+              const parts = time.split("-").map(Number);
+              time = { year: parts[0], month: parts[1], day: parts[2] };
+            } else if (typeof time === "number") {
+              time = Math.floor(time);
+            }
+            return { ...candle, time };
+          }).filter(candle => {
+            const t = candle.time;
+            const validTime = (typeof t === "number" && Number.isFinite(t) && t > 0) ||
+              (t && typeof t === "object" && Number.isFinite(t.year) && Number.isFinite(t.month) && Number.isFinite(t.day));
+            return validTime && [candle.open, candle.high, candle.low, candle.close].every(value => Number.isFinite(Number(value)));
+          });
+          setCandlesData(normalized);
+        }
       } catch (error) {
         if (!cancelled) {
           setChartError(error.message || "Live candles unavailable");
@@ -32,6 +49,13 @@ export default function StockChart({ stock, period = "6M", interval = "1D", heig
   useEffect(() => {
     if (!hostRef.current || !candlesData?.length) return;
     const host = hostRef.current;
+    const validCandles = candlesData.filter(c => {
+      const t = c?.time;
+      return ((typeof t === "number" && Number.isFinite(t) && t > 0) ||
+        (t && typeof t === "object" && Number.isFinite(t.year) && Number.isFinite(t.month) && Number.isFinite(t.day))) &&
+        [c.open, c.high, c.low, c.close].every(value => Number.isFinite(Number(value)));
+    });
+    if (!validCandles.length) return;
     const chart = createChart(host, {
       width: host.clientWidth,
       height: height || (compact ? 220 : 520),
@@ -78,9 +102,8 @@ export default function StockChart({ stock, period = "6M", interval = "1D", heig
       priceLineVisible: false,
       lastValueVisible: !compact,
     });
-    candleSeries.setData(candlesData.map(({ time, open, high, low, close }) => ({
-      time: typeof time === "number" ? time : time,
-      open, high, low, close
+    candleSeries.setData(validCandles.map(({ time, open, high, low, close }) => ({
+      time, open: Number(open), high: Number(high), low: Number(low), close: Number(close)
     })));
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -89,10 +112,10 @@ export default function StockChart({ stock, period = "6M", interval = "1D", heig
       lastValueVisible: false,
       priceLineVisible: false,
     });
-    volumeSeries.setData(candlesData.map((c) => ({
+    volumeSeries.setData(validCandles.map((c) => ({
       time: c.time,
-      value: c.volume || 0,
-      color: c.close >= c.open ? "rgba(8,153,129,0.55)" : "rgba(242,54,69,0.55)",
+      value: Number(c.volume) || 0,
+      color: Number(c.close) >= Number(c.open) ? "rgba(8,153,129,0.55)" : "rgba(242,54,69,0.55)",
     })));
     volumeSeries.priceScale().applyOptions({
       scaleMargins: { top: 0.82, bottom: 0 },
