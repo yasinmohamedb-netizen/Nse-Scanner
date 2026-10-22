@@ -56,9 +56,20 @@ export default function LowBaseBreakoutPage() {
     let scanNote = "";
     try {
       while (true) {
-        const response = await fetch(`/api/market/low-base-breakout?offset=${offset}&limit=20`, { cache: "no-store" });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || "Strategy scan failed.");
+        const response = await fetch(`/api/market/low-base-breakout?offset=${offset}&limit=15`, { cache: "no-store" });
+        const responseText = await response.text();
+        let payload;
+        try {
+          payload = responseText ? JSON.parse(responseText) : {};
+        } catch (_) {
+          payload = {};
+        }
+        if (!response.ok) {
+          throw new Error(payload.error || `Scanner API returned HTTP ${response.status}. Please retry in a moment.`);
+        }
+        if (!responseText || !payload || typeof payload !== "object") {
+          throw new Error("Scanner API returned an empty response. This can happen if the server is busy; please try Scan Again.");
+        }
         total = payload.total || total;
         scanNote = payload.note || "";
         sourceWarning = (payload.universeWarnings || []).join(" ");
