@@ -76,66 +76,26 @@ async function fetchDaily(symbol) {
 }
 
 /*
- * Low-base breakout setup:
- * 1) A local swing low forms after a preceding decline.
- * 2) Price then consolidates for the selected 3–9 completed sessions.
- * 3) The base stays above the swing low, is tight, and shows inside/range-bound trade.
- * 4) Today's completed candle closes above the entire base resistance.
+ * Low-base PRE-breakout setup: confirm a preceding decline and swing low,
+ * test trailing bases of 3–9 sessions including the latest completed session,
+ * and return only candidates that remain below base resistance.
  */
-function detectDowntrend(candles, pivotIndex) {
-  // Stage 1: prove a decline BEFORE accepting a low/base/breakout.
-  // Use up to 15 completed candles leading into the candidate pivot.
-  const start = Math.max(0, pivotIndex - 15);
-  const segment = candles.slice(start, pivotIndex + 1);
-  if (segment.length < 8) return null;
-
-  const firstClose = segment[0].close;
-  const lastClose = segment[segment.length - 1].close;
-  if (!(firstClose > 0 && lastClose > 0)) return null;
-
-  const declinePct = ((firstClose - lastClose) / firstClose) * 100;
-  const highs = segment.map(c => c.high);
-  let lowerHighSteps = 0;
-  for (let i = 1; i < highs.length; i++) {
-    if (highs[i] < highs[i - 1]) lowerHighSteps++;
-  }
-
-  // Linear regression slope on closes; negative slope confirms downward direction.
-  const closes = segment.map(c => c.close);
-  const meanX = (closes.length - 1) / 2;
-  const meanY = closes.reduce((sum, value) => sum + value, 0) / closes.length;
-  let numerator = 0;
-  let denominator = 0;
-  for (let i = 0; i < closes.length; i++) {
-    numerator += (i - meanX) * (closes[i] - meanY);
-    denominator += (i - meanX) ** 2;
-  }
-  const slope = denominator ? numerator / denominator : 0;
-  const enoughLowerHighs = lowerHighSteps >= Math.floor((segment.length - 1) * 0.4);
-
-  if (declinePct < 5 || slope >= 0 || !enoughLowerHighs) return null;
-  return { declinePct: Number(declinePct.toFixed(2)), startDate: segment[0].date, endDate: segment[segment.length - 1].date };
-}
-
 function evaluateBase(item) {
-  if (!item.history || !item.price) return null;
+  if (!item.history || !item.price || !item.candles?.length) return null;
   const history = item.history;
   if (history.length < 30) return null;
+  const latest = item.candles[item.candles.length - 1];
+  if (!latest) return null;
 
-  const todayCandle = item.candles?.[item.candles.length - 1];
-  if (!todayCandle || todayCandle.close <= todayCandle.open) return null;
-
-  // Stage 1 is detected first: find a confirmed local swing low at the end of
-  // a measurable downtrend. Only then test the base and breakout conditions.
   for (let days = 9; days >= 3; days--) {
     if (history.length < days + 18) continue;
-    const baseStart = history.length - days;
-    const base = history.slice(baseStart);
-    const preBase = history.slice(0, baseStart);
-    if (preBase.length < 15 || base.length !== days) continue;
+    const base = [...history.slice(-(days - 1)), latest];
+    if (base.length !== days) continue;
+    const preBase = history.slice(0, history.length - (days - 1));
+    if (preBase.length < 15) continue;
 
     let pivot = null;
-    const pivotSearchStart = Math.max(2, preBase.length - 15);
+    const pivotSearchStart = Math.max(2, preBase.length - 18);
     const pivotSearchEnd = preBase.length - 3;
     for (let i = pivotSearchStart; i <= pivotSearchEnd; i++) {
       const c = preBase[i];
@@ -149,11 +109,12 @@ function evaluateBase(item) {
     }
     if (!pivot) continue;
 
-    // Stage 2: consolidation after the swing low, holding close to that low.
     const resistance = Math.max(...base.map(c => c.high));
     const baseLow = Math.min(...base.map(c => c.low));
     const baseRangePct = baseLow > 0 ? ((resistance - baseLow) / baseLow) * 100 : Infinity;
-    if (!(item.price > resistance) || baseRangePct > 8) continue;
+
+    // Pre-breakout only: current close must still be below base resistance.
+    if (!(item.price < resistance) || baseRangePct > 8) continue;
     if (!base.every(c => c.low >= pivot.low * 0.985)) continue;
 
     const closes = base.map(c => c.close);
@@ -166,7 +127,6 @@ function evaluateBase(item) {
     }
     if (insideBars < 1) continue;
 
-    // Stage 3: today's completed bullish candle must close above base resistance.
     const { history: _history, ...publicItem } = item;
     return {
       ...publicItem,
@@ -179,8 +139,9 @@ function evaluateBase(item) {
       baseRangePct: Number(baseRangePct.toFixed(2)),
       baseDays: days,
       insideBars,
-      breakoutPct: Number((((item.price - resistance) / resistance) * 100).toFixed(2)),
-      signal: "Downtrend → swing low → 3–9 day base → bullish close above resistance",
+      distanceToBreakoutPct: Number((((resistance - item.price) / resistance) * 100).toFixed(2)),
+      signal: "Prior downtrend → swing low → 3–9 day base → still below resistance",
+      status: "In base · pre-breakout",
     };
   }
   return null;
@@ -209,8 +170,8 @@ export async function GET(request) {
     universeSource: universe.source, fallbackUniverse: universe.fallback, universeWarnings: universe.warnings,
     fetchedAt: now.toISOString(), marketDate, canConfirmToday,
     note: canConfirmToday
-      ? "Signals require today's completed daily candle, a recent swing low, a automatically detected 3–9 session inside consolidation, and a bullish close above base resistance."
-      : "Daily-close signals are available after 3:35 PM India time and once Yahoo Finance publishes today's completed candle.",
+      ? "Signals require today's completed daily candle, a recent swing low, and an automatically detected 3–9 session base that remains below resistance."
+      : "Pre-breakout scans are available after 3:35 PM India time and once Yahoo Finance publishes today's completed candle.",
     source: "Yahoo Finance unofficial daily candles",
   }, { headers: { "Cache-Control": "no-store" } });
 }
