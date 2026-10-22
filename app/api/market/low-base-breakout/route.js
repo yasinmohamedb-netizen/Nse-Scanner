@@ -80,6 +80,37 @@ async function fetchDaily(symbol) {
  * test trailing bases of 3–9 sessions including the latest completed session,
  * and return only candidates that remain below base resistance.
  */
+function detectDowntrend(candles, pivotIndex) {
+  const segment = candles.slice(Math.max(0, pivotIndex - 15), pivotIndex + 1);
+  if (segment.length < 8) return null;
+  const firstClose = segment[0].close;
+  const lastClose = segment[segment.length - 1].close;
+  if (!(firstClose > 0 && lastClose > 0)) return null;
+  const declinePct = ((firstClose - lastClose) / firstClose) * 100;
+  const highs = segment.map(c => c.high);
+  let lowerHighSteps = 0;
+  for (let i = 1; i < highs.length; i++) {
+    if (highs[i] < highs[i - 1]) lowerHighSteps++;
+  }
+  const closes = segment.map(c => c.close);
+  const meanX = (closes.length - 1) / 2;
+  const meanY = closes.reduce((sum, value) => sum + value, 0) / closes.length;
+  let numerator = 0;
+  let denominator = 0;
+  for (let i = 0; i < closes.length; i++) {
+    numerator += (i - meanX) * (closes[i] - meanY);
+    denominator += (i - meanX) ** 2;
+  }
+  const slope = denominator ? numerator / denominator : 0;
+  const enoughLowerHighs = lowerHighSteps >= Math.floor((segment.length - 1) * 0.4);
+  if (declinePct < 5 || slope >= 0 || !enoughLowerHighs) return null;
+  return {
+    declinePct: Number(declinePct.toFixed(2)),
+    startDate: segment[0].date,
+    endDate: segment[segment.length - 1].date,
+  };
+}
+
 function evaluateBase(item) {
   if (!item.history || !item.price || !item.candles?.length) return null;
   const history = item.history;
