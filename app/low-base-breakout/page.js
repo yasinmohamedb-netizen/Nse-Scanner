@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Activity, ArrowLeft, ExternalLink, RefreshCw, Search, ShieldCheck, WifiOff } from "lucide-react";
 import "./low-base-breakout.css";
+import StockCard from "../../components/StockCard";
 
 const CACHE_KEY = "nse-low-base-prebreakout-v2";
 
@@ -182,24 +183,17 @@ export default function LowBaseBreakoutPage() {
       </section>
 
       {filteredStocks.length ? <section className="lbb-stock-grid">
-        {filteredStocks.map(stock => <article className="lbb-stock-card" key={stock.symbol}>
-          <div className="lbb-stock-top">
-            <div><div className="lbb-symbol">{stock.symbol}</div><div className="lbb-name">{stock.name}</div></div>
-            <div className="lbb-price"><strong>₹{stock.price.toLocaleString("en-IN", {maximumFractionDigits:2})}</strong><span>+{(stock.distanceToBreakoutPct ?? (stock.resistance ? ((stock.resistance - stock.price) / stock.resistance) * 100 : 0)).toFixed(2)}% to resistance</span></div>
-          </div>
-          <div className="lbb-mini-chart" aria-label="Illustrative candle summary">
-            <div className="lbb-resistance"><span>Resistance ₹{stock.resistance.toFixed(2)}</span></div>
-            <div className="lbb-base-range"><span>Base range</span><b>₹{stock.baseLow.toFixed(2)} – ₹{stock.resistance.toFixed(2)}</b></div>
-            <div className="lbb-breakout-line"><span>Today's close</span><b>₹{stock.price.toFixed(2)}</b></div>
-          </div>
+        {filteredStocks.map(stock => <article className="lbb-stock-card lbb-stock-chart-card" key={stock.symbol}>
+          <StockCard stock={{ ...stock, change: stock.change || 0 }} period="6M" interval="1D" returnTo="/low-base-breakout" />
           <div className="lbb-stats">
-            <div><span>Pivot low</span><b>₹{(stock.pivotLow ?? stock.baseLow).toFixed(2)}</b></div>
+            <div><span>Base resistance</span><b>₹{Number(stock.resistance || 0).toFixed(2)}</b></div>
+            <div><span>Pivot low</span><b>₹{Number(stock.pivotLow ?? stock.baseLow ?? 0).toFixed(2)}</b></div>
             <div><span>Inside bars</span><b>{stock.insideBars ?? "—"}</b></div>
             <div><span>Base length</span><b>{stock.baseDays} days</b></div>
-            <div><span>Range width</span><b>{stock.baseRangePct.toFixed(2)}%</b></div>
-            <div><span>Volume</span><b>{(stock.volume || 0).toLocaleString("en-IN")}</b></div>
+            <div><span>Range width</span><b>{Number(stock.baseRangePct || 0).toFixed(2)}%</b></div>
+            <div><span>Volume</span><b>{Number(stock.volume || 0).toLocaleString("en-IN")}</b></div>
           </div>
-          <Link href={`/stock/${encodeURIComponent(stock.symbol)}`} className="lbb-chart-link">Open stock chart <ExternalLink size={13}/></Link>
+          <div className="lbb-distance-row"><span>Distance to resistance</span><b>{Number(stock.distanceToBreakoutPct ?? 0).toFixed(2)}%</b></div>
         </article>)}
       </section> : <section className="lbb-empty">
         <Search size={28}/>
