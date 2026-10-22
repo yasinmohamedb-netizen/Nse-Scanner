@@ -82,6 +82,41 @@ async function fetchDaily(symbol) {
  * 3) The base stays above the swing low, is tight, and shows inside/range-bound trade.
  * 4) Today's completed candle closes above the entire base resistance.
  */
+function detectDowntrend(candles, pivotIndex) {
+  // Stage 1: prove a decline BEFORE accepting a low/base/breakout.
+  // Use up to 15 completed candles leading into the candidate pivot.
+  const start = Math.max(0, pivotIndex - 15);
+  const segment = candles.slice(start, pivotIndex + 1);
+  if (segment.length < 8) return null;
+
+  const firstClose = segment[0].close;
+  const lastClose = segment[segment.length - 1].close;
+  if (!(firstClose > 0 && lastClose > 0)) return null;
+
+  const declinePct = ((firstClose - lastClose) / firstClose) * 100;
+  const highs = segment.map(c => c.high);
+  let lowerHighSteps = 0;
+  for (let i = 1; i < highs.length; i++) {
+    if (highs[i] < highs[i - 1]) lowerHighSteps++;
+  }
+
+  // Linear regression slope on closes; negative slope confirms downward direction.
+  const closes = segment.map(c => c.close);
+  const meanX = (closes.length - 1) / 2;
+  const meanY = closes.reduce((sum, value) => sum + value, 0) / closes.length;
+  let numerator = 0;
+  let denominator = 0;
+  for (let i = 0; i < closes.length; i++) {
+    numerator += (i - meanX) * (closes[i] - meanY);
+    denominator += (i - meanX) ** 2;
+  }
+  const slope = denominator ? numerator / denominator : 0;
+  const enoughLowerHighs = lowerHighSteps >= Math.floor((segment.length - 1) * 0.4);
+
+  if (declinePct < 5 || slope >= 0 || !enoughLowerHighs) return null;
+  return { declinePct: Number(declinePct.toFixed(2)), startDate: segment[0].date, endDate: segment[segment.length - 1].date };
+}
+
 function evaluateBase(item) {
   if (!item.history || !item.price) return null;
   const history = item.history;
@@ -90,8 +125,8 @@ function evaluateBase(item) {
   const todayCandle = item.candles?.[item.candles.length - 1];
   if (!todayCandle || todayCandle.close <= todayCandle.open) return null;
 
-  // Search the most recent possible base first. The consolidation length is
-  // automatically detected anywhere from 3 to 9 completed sessions.
+  // Stage 1 is detected first: find a confirmed local swing low at the end of
+  // a measurable downtrend. Only then test the base and breakout conditions.
   for (let days = 9; days >= 3; days--) {
     if (history.length < days + 18) continue;
     const baseStart = history.length - days;
@@ -99,12 +134,6 @@ function evaluateBase(item) {
     const preBase = history.slice(0, baseStart);
     if (preBase.length < 15 || base.length !== days) continue;
 
-    const resistance = Math.max(...base.map(c => c.high));
-    const baseLow = Math.min(...base.map(c => c.low));
-    const baseRangePct = baseLow > 0 ? ((resistance - baseLow) / baseLow) * 100 : Infinity;
-    if (!(item.price > resistance) || baseRangePct > 8) continue;
-
-    // Locate a recent swing/pivot low just before the consolidation.
     let pivot = null;
     const pivotSearchStart = Math.max(2, preBase.length - 15);
     const pivotSearchEnd = preBase.length - 3;
@@ -113,17 +142,20 @@ function evaluateBase(item) {
       const left = preBase.slice(i - 2, i);
       const right = preBase.slice(i + 1, i + 3);
       if (left.length !== 2 || right.length !== 2) continue;
-      if ([...left, ...right].every(other => other.low > c.low) && (!pivot || c.low < pivot.low)) {
-        pivot = { ...c, index: i };
+      if ([...left, ...right].every(other => other.low > c.low)) {
+        const downtrend = detectDowntrend(preBase, i);
+        if (downtrend && (!pivot || c.low < pivot.low)) pivot = { ...c, index: i, downtrend };
       }
     }
     if (!pivot) continue;
 
-    const beforePivot = preBase.slice(Math.max(0, pivot.index - 12), pivot.index);
-    if (beforePivot.length < 6 || beforePivot[0].close <= pivot.low * 1.04) continue;
-
-    // Price should base above the pivot, with closes clustered in a narrow band.
+    // Stage 2: consolidation after the swing low, holding close to that low.
+    const resistance = Math.max(...base.map(c => c.high));
+    const baseLow = Math.min(...base.map(c => c.low));
+    const baseRangePct = baseLow > 0 ? ((resistance - baseLow) / baseLow) * 100 : Infinity;
+    if (!(item.price > resistance) || baseRangePct > 8) continue;
     if (!base.every(c => c.low >= pivot.low * 0.985)) continue;
+
     const closes = base.map(c => c.close);
     const closeDriftPct = ((Math.max(...closes) - Math.min(...closes)) / Math.min(...closes)) * 100;
     if (closeDriftPct > 7) continue;
@@ -132,21 +164,23 @@ function evaluateBase(item) {
     for (let i = 1; i < base.length; i++) {
       if (base[i].high <= base[i - 1].high && base[i].low >= base[i - 1].low) insideBars++;
     }
-    // At least one genuine inside bar confirms contraction; the full base can
-    // contain other narrow-range candles too.
     if (insideBars < 1) continue;
 
+    // Stage 3: today's completed bullish candle must close above base resistance.
     const { history: _history, ...publicItem } = item;
     return {
       ...publicItem,
       resistance,
       baseLow,
       pivotLow: Number(pivot.low.toFixed(2)),
+      downtrendPct: pivot.downtrend.declinePct,
+      downtrendStart: pivot.downtrend.startDate,
+      downtrendEnd: pivot.downtrend.endDate,
       baseRangePct: Number(baseRangePct.toFixed(2)),
       baseDays: days,
       insideBars,
       breakoutPct: Number((((item.price - resistance) / resistance) * 100).toFixed(2)),
-      signal: "Swing low + 3–9 day tight base + bullish close above resistance",
+      signal: "Downtrend → swing low → 3–9 day base → bullish close above resistance",
     };
   }
   return null;
