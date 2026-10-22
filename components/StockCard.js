@@ -4,10 +4,10 @@ import Link from "next/link";
 import StockChart from "./StockChart";
 import { ArrowDownRight, ArrowUpRight, ExternalLink } from "lucide-react";
 
-export default function StockCard({ stock, period, interval }) {
+export default function StockCard({ stock, period, interval, returnTo = "/" }) {
   const positive = stock.change >= 0;
   return (
-    <Link href={`/stock/${encodeURIComponent(stock.symbol)}`} className="stock-card-link" aria-label={`Open full chart for ${stock.symbol}`}>
+    <Link href={`/stock/${encodeURIComponent(stock.symbol)}?from=${encodeURIComponent(returnTo)}`} className="stock-card-link" aria-label={`Open full chart for ${stock.symbol}`}>
       <article className="stock-card">
         <header className="stock-card-header">
           <div className="stock-identity">
