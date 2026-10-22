@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Activity, ArrowLeft, ExternalLink, RefreshCw, Search, ShieldCheck, WifiOff } from "lucide-react";
 import "./low-base-breakout.css";
 
-const CACHE_KEY = "nse-low-base-breakout-latest-v1";
+const CACHE_KEY = "nse-low-base-prebreakout-v2";
 
 export default function LowBaseBreakoutPage() {
   const [minPrice, setMinPrice] = useState("0");
@@ -97,7 +97,7 @@ export default function LowBaseBreakoutPage() {
     const volume = minVolume === "" ? 0 : Number(minVolume);
     if (min > max) return [];
     return stocks.filter(s => s.price >= min && s.price <= max && (s.volume || 0) >= volume)
-      .sort((a, b) => sort === "price-asc" ? a.price - b.price : sort === "volume-desc" ? (b.volume || 0) - (a.volume || 0) : a.distanceToBreakoutPct - b.distanceToBreakoutPct);
+      .sort((a, b) => sort === "price-asc" ? a.price - b.price : sort === "volume-desc" ? (b.volume || 0) - (a.volume || 0) : (a.distanceToBreakoutPct ?? 100) - (b.distanceToBreakoutPct ?? 100));
   }, [stocks, minPrice, maxPrice, minVolume, sort]);
 
   const progressPct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
@@ -174,7 +174,7 @@ export default function LowBaseBreakoutPage() {
         {filteredStocks.map(stock => <article className="lbb-stock-card" key={stock.symbol}>
           <div className="lbb-stock-top">
             <div><div className="lbb-symbol">{stock.symbol}</div><div className="lbb-name">{stock.name}</div></div>
-            <div className="lbb-price"><strong>₹{stock.price.toLocaleString("en-IN", {maximumFractionDigits:2})}</strong><span>+{stock.distanceToBreakoutPct.toFixed(2)}% to resistance</span></div>
+            <div className="lbb-price"><strong>₹{stock.price.toLocaleString("en-IN", {maximumFractionDigits:2})}</strong><span>+{(stock.distanceToBreakoutPct ?? (stock.resistance ? ((stock.resistance - stock.price) / stock.resistance) * 100 : 0)).toFixed(2)}% to resistance</span></div>
           </div>
           <div className="lbb-mini-chart" aria-label="Illustrative candle summary">
             <div className="lbb-resistance"><span>Resistance ₹{stock.resistance.toFixed(2)}</span></div>
